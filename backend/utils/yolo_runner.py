@@ -7,8 +7,8 @@ For production: fine-tune on pothole dataset (e.g. Roboflow pothole dataset).
 import io, base64, os
 from PIL import Image
 import numpy as np
+import torch
 
-# Lazy-load model to avoid slow startup
 _model = None
 
 def get_model():
@@ -33,11 +33,12 @@ def run_inference(image_bytes: bytes) -> tuple[list[dict], str]:
 
     model = get_model()
 
-    # Run inference
-    results = model(img_array, verbose=False)
+    # Determine optimal device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(device)
+    results = model(img_array, device=device, verbose=False)
     result = results[0]
 
-    # class 0 = pothole in all standard pothole YOLO datasets
     POTHOLE_CLASS_ID = int(os.environ.get("YOLO_CLASS_ID", 0))
 
     detections = []
