@@ -1,7 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 flask==3.1.0
 flask-cors==5.0.0
-torch --index-url https://download.pytorch.org/whl/cpu
-torchvision --index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
 ultralytics>=8.3.86
 Pillow>=11.1.0
 numpy>=1.23.0
