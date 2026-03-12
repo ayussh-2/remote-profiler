@@ -39,13 +39,17 @@ def _get_sheet():
     if _sheet is not None:
         return _sheet
 
-    creds_path = os.environ.get("GOOGLE_CREDS_JSON", "credentials.json")
     sheet_id = os.environ.get("GOOGLE_SHEET_ID", "")
-
     if not sheet_id:
         raise EnvironmentError("GOOGLE_SHEET_ID env var not set")
 
-    creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    creds_json_str = os.environ.get("GOOGLE_CREDS_JSON_CONTENT", "")
+    if creds_json_str:
+        creds_info = json.loads(creds_json_str)
+        creds = Credentials.from_service_account_info(creds_info, scopes=SCOPES)
+    else:
+        creds_path = os.environ.get("GOOGLE_CREDS_JSON", "credentials.json")
+        creds = Credentials.from_service_account_file(creds_path, scopes=SCOPES)
     _client = gspread.authorize(creds)
     spreadsheet = _client.open_by_key(sheet_id)
 
