@@ -1,22 +1,16 @@
 from flask import Blueprint, request, jsonify
 from utils.estimator import estimate_volume
+from utils.material_estimator import estimate_repair
 from utils.sheets import append_to_sheet
 from utils.yolo_runner import run_inference
-import base64, io, time
+import base64, time
 
 detect_bp = Blueprint("detect", __name__)
 
+
 @detect_bp.route("/detect", methods=["POST"])
 def detect():
-    """
-    Expects multipart/form-data OR JSON with:
-      - image: base64 encoded image OR file upload
-      - depth_mm: float (from VL53L1X ToF sensor, in millimeters)
-      - lat: float (optional GPS latitude)
-      - lng: float (optional GPS longitude)
-    """
     try:
-        # --- Parse inputs ---
         if request.content_type and "multipart" in request.content_type:
             image_file = request.files.get("image")
             image_bytes = image_file.read()
@@ -31,37 +25,45 @@ def detect():
             lat = float(data.get("lat", 0.0))
             lng = float(data.get("lng", 0.0))
 
-        # --- Run YOLO inference ---
         detections, annotated_b64 = run_inference(image_bytes)
 
         if not detections:
             return jsonify({"status": "no_pothole", "message": "No pothole detected"}), 200
 
-        # Use largest detected pothole
         best = max(detections, key=lambda d: d["area_px"])
 
-        # --- Volume estimation ---
-        result = estimate_volume(
+        vol = estimate_volume(
             area_px=best["area_px"],
             depth_mm=depth_mm,
             confidence=best["confidence"],
         )
 
-        # --- Build response payload ---
+        repair = estimate_repair(
+            area_m2=vol["area_m2"],
+            depth_m=vol["depth_m"],
+            volume_m3=vol["volume_m3"],
+            volume_liters=vol["volume_liters"],
+        )
+
         payload = {
             "status": "pothole_detected",
             "timestamp": int(time.time()),
             "lat": lat,
             "lng": lng,
-            "area_m2": result["area_m2"],
-            "depth_m": result["depth_m"],
-            "volume_m3": result["volume_m3"],
-            "volume_liters": result["volume_liters"],
+            "area_m2": vol["area_m2"],
+            "depth_m": vol["depth_m"],
+            "volume_m3": vol["volume_m3"],
+            "volume_liters": vol["volume_liters"],
+            "volume_min_liters": vol["volume_min_liters"],
+            "volume_max_liters": vol["volume_max_liters"],
             "confidence": best["confidence"],
+            "severity": repair["severity"],
+            "repair_method": repair["repair_method"],
+            "materials": repair["materials"],
+            "estimated_cost_inr": repair["estimated_cost_inr"],
             "annotated_image": annotated_b64,
         }
 
-        # --- Log to Google Sheets (non-blocking) ---
         try:
             append_to_sheet(payload)
         except Exception as e:

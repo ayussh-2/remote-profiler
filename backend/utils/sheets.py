@@ -26,7 +26,8 @@ SCOPES = [
 
 SHEET_HEADERS = [
     "timestamp", "datetime", "lat", "lng",
-    "area_m2", "depth_m", "volume_m3", "volume_liters", "confidence"
+    "area_m2", "depth_m", "volume_m3", "volume_liters", "confidence",
+    "severity", "estimated_cost_inr"
 ]
 
 _client = None
@@ -74,6 +75,8 @@ def append_to_sheet(payload: dict):
         payload.get("volume_m3", 0),
         payload.get("volume_liters", 0),
         payload.get("confidence", 0),
+        payload.get("severity", ""),
+        payload.get("estimated_cost_inr", 0),
     ]
     sheet.append_row(row, value_input_option="USER_ENTERED")
 

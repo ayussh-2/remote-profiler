@@ -39,4 +39,6 @@ def estimate_volume(area_px: float, depth_mm: float, confidence: float) -> dict:
         "depth_m": round(depth_m, 4),
         "volume_m3": round(volume_m3, 8),
         "volume_liters": round(volume_liters, 4),
+        "volume_min_liters": round(volume_liters * 0.8, 4),
+        "volume_max_liters": round(volume_liters * 1.2, 4),
     }

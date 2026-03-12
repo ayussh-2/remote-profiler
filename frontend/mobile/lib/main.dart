@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
+import 'screens/main_shell.dart';
 import 'theme.dart';
 
 void main() {
@@ -16,7 +16,7 @@ class PavementProfilerApp extends StatelessWidget {
       title: 'Pavement Profiler',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const HomeScreen(),
+      home: const MainShell(),
     );
   }
 }

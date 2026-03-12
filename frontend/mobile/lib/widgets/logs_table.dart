@@ -9,6 +9,21 @@ class LogsTable extends StatelessWidget {
 
   const LogsTable({super.key, required this.logs, required this.onRefresh});
 
+  static Color _severityColor(String severity) {
+    switch (severity) {
+      case 'LOW':
+        return AppTheme.green;
+      case 'MEDIUM':
+        return AppTheme.accent;
+      case 'HIGH':
+        return AppTheme.red;
+      case 'CRITICAL':
+        return const Color(0xFF8B0000);
+      default:
+        return AppTheme.muted;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -91,6 +106,7 @@ class LogsTable extends StatelessWidget {
                           ),
                           columns: const [
                             DataColumn(label: Text('DATE')),
+                            DataColumn(label: Text('SEV')),
                             DataColumn(label: Text('GPS (LAT, LNG)')),
                             DataColumn(label: Text('DEPTH')),
                             DataColumn(label: Text('VOL')),
@@ -112,6 +128,16 @@ class LogsTable extends StatelessWidget {
                                 return DataRow(
                                   cells: [
                                     DataCell(Text(dateStr)),
+                                    DataCell(
+                                      Text(
+                                        l.severity,
+                                        style: TextStyle(
+                                          color: _severityColor(l.severity),
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ),
                                     DataCell(Text(gpsStr)),
                                     DataCell(Text('${l.depthM} m')),
                                     DataCell(Text('${l.volumeLiters} L')),
