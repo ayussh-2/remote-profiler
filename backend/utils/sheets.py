@@ -1,16 +1,5 @@
 """
 Google Sheets integration via gspread.
-
-Setup:
-1. Create a Google Cloud project → enable Sheets API
-2. Create a Service Account → download credentials JSON
-3. Share your Google Sheet with the service account email
-4. Set env vars:
-   GOOGLE_CREDS_JSON = path to credentials JSON file
-   GOOGLE_SHEET_ID   = your spreadsheet ID (from URL)
-
-Sheet columns (auto-created on first run):
-  timestamp | lat | lng | area_m2 | depth_m | volume_m3 | volume_liters | confidence
 """
 
 import os

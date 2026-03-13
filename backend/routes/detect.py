@@ -1,9 +1,10 @@
+import base64
+import time
+
 from flask import Blueprint, request, jsonify
-from utils.estimator import estimate_volume
-from utils.material_estimator import estimate_repair, predict_materials_ml, estimate_cost
+from utils.material_estimator import estimate_volume, predict_materials_ml, estimate_cost, REPAIR_METHODS
 from utils.sheets import append_to_sheet
 from utils.yolo_runner import run_inference
-import base64, time
 
 detect_bp = Blueprint("detect", __name__)
 
@@ -62,12 +63,7 @@ def detect():
             "volume_max_liters": vol["volume_max_liters"],
             "confidence": best["confidence"],
             "severity": severity,
-            "repair_method": {
-                "LOW": "Surface patch / slurry seal",
-                "MEDIUM": "Throw-and-roll patch",
-                "HIGH": "Full-depth semi-permanent patch",
-                "CRITICAL": "Full-depth patch with base repair",
-            }.get(severity, "Unknown"),
+            "repair_method": REPAIR_METHODS.get(severity, "Unknown"),
             "materials": {
                 "hotmix_kg": materials["hotmix_kg"],
                 "tack_coat_liters": materials["tack_coat_liters"],

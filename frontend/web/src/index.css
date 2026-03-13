@@ -140,7 +140,7 @@ body {
 /* ─── Main grid ─────────────────────────────────────────────────────────────── */
 .main-grid {
     display: grid;
-    grid-template-columns: 300px 1fr;
+    grid-template-columns: 380px 1fr;
     flex: 1;
     overflow: hidden;
     gap: 1px;
@@ -294,7 +294,7 @@ body {
 
 .preview-box {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 4 / 3;
     background: #070a0d;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -344,6 +344,35 @@ body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+}
+
+/* ─── Result section (severity/repair/source rows) ─────────────────────────── */
+.result-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+}
+
+.result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.result-text {
+    font-size: 11px;
+    color: var(--text);
+    text-align: right;
+}
+
+.result-text--dim {
+    color: var(--muted);
+    font-size: 9px;
+    letter-spacing: 1px;
 }
 
 .session-section {

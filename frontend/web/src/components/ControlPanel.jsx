@@ -2,6 +2,13 @@ import { useRef } from "react";
 import { Upload, ScanLine, MapPin } from "lucide-react";
 import StatCard from "./StatCard";
 
+const SEVERITY_BADGE = {
+    LOW: "badge-green",
+    MEDIUM: "badge-accent",
+    HIGH: "badge-dim",
+    CRITICAL: "badge-red",
+};
+
 export default function ControlPanel({
     imagePreview,
     annotatedImg,
@@ -108,44 +115,97 @@ export default function ControlPanel({
                 disabled={loading}
             >
                 <ScanLine size={14} />
-                {loading ? "Analyzing…" : "Run Detection"}
+                {loading ? "Analyzing..." : "Run Detection"}
             </button>
 
             {/* ── Error ── */}
-            {error && <div className="error-banner">✕ {error}</div>}
+            {error && <div className="error-banner">x {error}</div>}
 
             {/* ── Latest result ── */}
             {latest && (
-                <div>
-                    <span className="label" style={{ marginTop: 4 }}>
-                        Latest Detection
-                    </span>
-                    <div className="detection-grid">
-                        <StatCard
-                            label="Area"
-                            value={latest.area_m2}
-                            unit="m²"
-                            size="sm"
-                        />
-                        <StatCard
-                            label="Depth"
-                            value={latest.depth_m}
-                            unit="m"
-                            size="sm"
-                        />
-                        <StatCard
-                            label="Volume"
-                            value={latest.volume_liters}
-                            unit="L"
-                            size="sm"
-                        />
-                        <StatCard
-                            label="Conf"
-                            value={`${(latest.confidence * 100).toFixed(1)}%`}
-                            size="sm"
-                        />
+                <>
+                    <div>
+                        <span className="label" style={{ marginTop: 4 }}>
+                            Latest Detection
+                        </span>
+                        <div className="detection-grid">
+                            <StatCard
+                                label="Area"
+                                value={latest.area_m2}
+                                unit="m2"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Depth"
+                                value={latest.depth_m}
+                                unit="m"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Volume"
+                                value={latest.volume_liters}
+                                unit="L"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Conf"
+                                value={`${(latest.confidence * 100).toFixed(1)}%`}
+                                size="sm"
+                            />
+                        </div>
                     </div>
-                </div>
+
+                    {/* ── Severity & Repair ── */}
+                    <div className="result-section">
+                        <div className="result-row">
+                            <span className="label label-inline">Severity</span>
+                            <span className={`badge ${SEVERITY_BADGE[latest.severity] || "badge-accent"}`}>
+                                {latest.severity}
+                            </span>
+                        </div>
+                        <div className="result-row">
+                            <span className="label label-inline">Repair</span>
+                            <span className="result-text">{latest.repair_method}</span>
+                        </div>
+                        <div className="result-row">
+                            <span className="label label-inline">Source</span>
+                            <span className="result-text result-text--dim">
+                                {latest.prediction_source}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* ── Materials ── */}
+                    <div>
+                        <span className="label">Materials Required</span>
+                        <div className="detection-grid">
+                            <StatCard
+                                label="Hot-Mix Asphalt"
+                                value={latest.materials?.hotmix_kg ?? "--"}
+                                unit="kg"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Tack Coat"
+                                value={latest.materials?.tack_coat_liters ?? "--"}
+                                unit="L"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Aggregate Base"
+                                value={latest.materials?.aggregate_base_kg ?? "--"}
+                                unit="kg"
+                                size="sm"
+                            />
+                            <StatCard
+                                label="Est. Cost"
+                                value={latest.estimated_cost_inr ?? "--"}
+                                unit="INR"
+                                size="sm"
+                            />
+                        </div>
+                    </div>
+                </>
             )}
 
             {/* ── Session summary ── */}

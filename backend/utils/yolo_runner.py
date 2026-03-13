@@ -1,15 +1,26 @@
-"""
-YOLOv8 inference wrapper.
-Uses ultralytics YOLOv8 with a pretrained COCO model for MVP.
-For production: fine-tune on pothole dataset (e.g. Roboflow pothole dataset).
-"""
+"""YOLOv8 inference wrapper for pothole/crack detection."""
 
-import io, base64, os
+import io
+import base64
+import os
+
 from PIL import Image
 import numpy as np
 import torch
 
 _model = None
+_device = None
+
+
+def get_device() -> str:
+    global _device
+    if _device is None:
+        _device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[YOLO] Device: {_device}")
+        if _device == "cuda":
+            print(f"[YOLO] GPU: {torch.cuda.get_device_name(0)}")
+    return _device
+
 
 def get_model():
     global _model
@@ -17,29 +28,22 @@ def get_model():
         from ultralytics import YOLO
         weights = os.environ.get("YOLO_WEIGHTS", "yolov8n.pt")
         _model = YOLO(weights)
+        print(f"[YOLO] Loaded weights: {weights}")
     return _model
 
 
 def run_inference(image_bytes: bytes) -> tuple[list[dict], str]:
-    """
-    Run YOLO inference on raw image bytes.
-    Returns:
-        detections: list of {area_px, confidence, bbox}
-        annotated_b64: base64 encoded annotated image
-    """
-    # Decode image
     image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     img_array = np.array(image)
 
     model = get_model()
-
-    # Determine optimal device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(device)
+    device = get_device()
     results = model(img_array, device=device, verbose=False)
     result = results[0]
 
-    POTHOLE_CLASS_ID = int(os.environ.get("YOLO_CLASS_ID", 0))
+    pothole_class_id = int(os.environ.get("YOLO_CLASS_ID", 0))
+    weights = os.environ.get("YOLO_WEIGHTS", "yolov8n.pt")
+    is_custom_weights = weights != "yolov8n.pt"
 
     detections = []
     for box in result.boxes:
@@ -48,15 +52,11 @@ def run_inference(image_bytes: bytes) -> tuple[list[dict], str]:
 
         if conf < 0.3:
             continue
-        # When using COCO weights (no pothole class), skip class filter for demo
-        weights = os.environ.get("YOLO_WEIGHTS", "yolov8n.pt")
-        if weights != "yolov8n.pt" and cls_id != POTHOLE_CLASS_ID:
+        if is_custom_weights and cls_id != pothole_class_id:
             continue
 
         x1, y1, x2, y2 = box.xyxy[0].tolist()
-        width_px = x2 - x1
-        height_px = y2 - y1
-        area_px = width_px * height_px
+        area_px = (x2 - x1) * (y2 - y1)
 
         detections.append({
             "area_px": area_px,
@@ -65,7 +65,6 @@ def run_inference(image_bytes: bytes) -> tuple[list[dict], str]:
             "class_id": cls_id,
         })
 
-    # Generate annotated image
     annotated_array = result.plot()
     annotated_image = Image.fromarray(annotated_array)
     buf = io.BytesIO()

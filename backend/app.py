@@ -11,14 +11,15 @@ from utils.material_estimator import enable_ml_mode
 app = Flask(__name__)
 CORS(app)
 
-# Enable ML-based material prediction (uses rule-based as fallback if models unavailable)
-ml_status = enable_ml_mode('backend/models')
+ml_status = enable_ml_mode('models/material_estimator')
 if not ml_status:
-    print("⚠ ML models not available. Using rule-based estimation. Run: python backend/utils/ml_trainer.py --train backend/data/repair_data.csv")
+    print("[APP] ML models not available -- using rule-based estimation")
+
 
 @app.get("/")
 def index():
     return {"message": "Hello, World!"}
+
 
 app.register_blueprint(detect_bp, url_prefix="/api")
 app.register_blueprint(logs_bp, url_prefix="/api")
