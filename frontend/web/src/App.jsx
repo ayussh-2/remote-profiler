@@ -1,9 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
-import { Hexagon, Wifi, WifiOff, Activity } from "lucide-react";
+import {
+    Hexagon,
+    Wifi,
+    WifiOff,
+    Activity,
+    Radio,
+    ScanLine,
+} from "lucide-react";
 import ControlPanel from "./components/ControlPanel";
 import MapView from "./components/MapView";
-import LogsTable from "./components/LogsTable";
-import SheetsTest from "./components/SheetsTest";
+
+import StreamView from "./components/StreamView";
 
 const API_BASE = import.meta.env.VITE_API_BASE;
 
@@ -51,6 +58,7 @@ function StatsStrip({ logs }) {
 }
 
 export default function App() {
+    const [mode, setMode] = useState("manual");
     const [logs, setLogs] = useState([]);
     const [latest, setLatest] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -106,8 +114,8 @@ export default function App() {
             const data = await res.json();
 
             if (data.error) throw new Error(data.error);
-            if (data.status === "no_pothole") {
-                setError("No pothole detected in image");
+            if (data.status === "no_defect" || data.status === "no_pothole") {
+                setError("No defect detected in image");
             } else {
                 setLatest(data);
                 if (data.annotated_image)
@@ -133,7 +141,22 @@ export default function App() {
                 <span className="header-logo">Pavement Profiler</span>
                 <span className="header-sub">Road Defect Analysis System</span>
                 <div className="header-right">
-                    <SheetsTest apiBase={import.meta.env.VITE_API_BASE} />
+                    <div className="mode-toggle">
+                        <button
+                            className={`mode-btn ${mode === "manual" ? "mode-btn--active" : ""}`}
+                            onClick={() => setMode("manual")}
+                        >
+                            <ScanLine size={11} />
+                            Manual
+                        </button>
+                        <button
+                            className={`mode-btn ${mode === "stream" ? "mode-btn--active" : ""}`}
+                            onClick={() => setMode("stream")}
+                        >
+                            <Radio size={11} />
+                            Live
+                        </button>
+                    </div>
                     {apiOk ? (
                         <Wifi size={13} color="var(--green)" />
                     ) : (
@@ -146,54 +169,59 @@ export default function App() {
                 </div>
             </header>
 
-            {/* ── Stats strip ── */}
-            <StatsStrip logs={logs} />
+            {mode === "stream" ? (
+                <StreamView />
+            ) : (
+                <>
+                    <StatsStrip logs={logs} />
 
-            {/* ── Main layout ── */}
-            <div className="main-grid">
-                {/* Left: Control Panel */}
-                <div className="panel-bg">
-                    <ControlPanel
-                        imagePreview={imagePreview}
-                        annotatedImg={annotatedImg}
-                        depthMm={depthMm}
-                        lat={lat}
-                        lng={lng}
-                        loading={loading}
-                        error={error}
-                        latest={latest}
-                        logs={logs}
-                        onFileChange={handleFileChange}
-                        onDepthChange={setDepthMm}
-                        onLatChange={setLat}
-                        onLngChange={setLng}
-                        onDetect={handleDetect}
-                    />
-                </div>
-
-                {/* Right: Map + Logs */}
-                <div className="right-stack">
-                    <div className="map-panel">
-                        <div className="map-panel-header">
-                            <Activity size={11} color="var(--muted)" />
-                            <span className="label label-inline">
-                                Defect Map
-                            </span>
-                            <span className="map-points">
-                                {logs.filter((l) => l.lat && l.lng).length}{" "}
-                                POINTS
-                            </span>
+                    <div className="main-grid">
+                        <div className="panel-bg">
+                            <ControlPanel
+                                imagePreview={imagePreview}
+                                annotatedImg={annotatedImg}
+                                depthMm={depthMm}
+                                lat={lat}
+                                lng={lng}
+                                loading={loading}
+                                error={error}
+                                latest={latest}
+                                logs={logs}
+                                onFileChange={handleFileChange}
+                                onDepthChange={setDepthMm}
+                                onLatChange={setLat}
+                                onLngChange={setLng}
+                                onDetect={handleDetect}
+                            />
                         </div>
-                        <div className="map-inner">
-                            <MapView logs={logs} />
+
+                        <div className="right-stack">
+                            <div className="map-panel">
+                                <div className="map-panel-header">
+                                    <Activity size={11} color="var(--muted)" />
+                                    <span className="label label-inline">
+                                        Defect Map
+                                    </span>
+                                    <span className="map-points">
+                                        {
+                                            logs.filter((l) => l.lat && l.lng)
+                                                .length
+                                        }{" "}
+                                        POINTS
+                                    </span>
+                                </div>
+                                <div className="map-inner">
+                                    <MapView logs={logs} />
+                                </div>
+                            </div>
+
+                            {/* <div className="logs-panel">
+                                <LogsTable logs={logs} onRefresh={fetchLogs} />
+                            </div> */}
                         </div>
                     </div>
-
-                    <div className="logs-panel">
-                        <LogsTable logs={logs} onRefresh={fetchLogs} />
-                    </div>
-                </div>
-            </div>
+                </>
+            )}
         </div>
     );
 }

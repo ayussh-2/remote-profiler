@@ -6,7 +6,6 @@ class LogEntry {
   final double confidence;
   final num timestamp;
   final String severity;
-  final double estimatedCostInr;
 
   LogEntry({
     this.lat,
@@ -16,7 +15,6 @@ class LogEntry {
     required this.confidence,
     required this.timestamp,
     this.severity = '',
-    this.estimatedCostInr = 0.0,
   });
 
   factory LogEntry.fromJson(Map<String, dynamic> json) {
@@ -28,7 +26,6 @@ class LogEntry {
       confidence: _parseDouble(json['confidence']) ?? 0.0,
       timestamp: json['timestamp'] ?? 0,
       severity: json['severity']?.toString() ?? '',
-      estimatedCostInr: _parseDouble(json['estimated_cost_inr']) ?? 0.0,
     );
   }
 

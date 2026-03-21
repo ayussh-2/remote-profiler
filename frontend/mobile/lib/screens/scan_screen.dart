@@ -532,32 +532,6 @@ class _ScanScreenState extends State<ScanScreen>
               'Aggregate base',
               '${materials['aggregate_base_kg']} kg',
             ),
-
-          const Divider(color: AppTheme.border, height: 16),
-
-          // Cost
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'EST. COST',
-                style: TextStyle(
-                  fontSize: 9,
-                  color: AppTheme.muted,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text(
-                'INR ${d['estimated_cost_inr'] ?? 0}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accent,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );

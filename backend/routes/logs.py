@@ -1,5 +1,5 @@
 from flask import Blueprint, jsonify
-from utils.sheets import fetch_all_logs
+from utils.database import fetch_all_logs
 
 logs_bp = Blueprint("logs", __name__)
 

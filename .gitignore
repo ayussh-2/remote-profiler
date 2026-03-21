@@ -5,6 +5,8 @@ node_modules/
 credentials.json
 
 __pycache__
+*.db
 
 build/
 
+simulator_images/

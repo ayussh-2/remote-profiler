@@ -9,6 +9,12 @@ const SEVERITY_BADGE = {
     CRITICAL: "badge-red",
 };
 
+const DEFECT_LABEL = {
+    pothole: "POTHOLE",
+    crack: "CRACK",
+    shallow_pothole: "SHALLOW POTHOLE",
+};
+
 export default function ControlPanel({
     imagePreview,
     annotatedImg,
@@ -157,6 +163,14 @@ export default function ControlPanel({
 
                     {/* ── Severity & Repair ── */}
                     <div className="result-section">
+                        {latest.defect_type && (
+                            <div className="result-row">
+                                <span className="label label-inline">Type</span>
+                                <span className="badge badge-accent">
+                                    {DEFECT_LABEL[latest.defect_type] || latest.defect_type}
+                                </span>
+                            </div>
+                        )}
                         <div className="result-row">
                             <span className="label label-inline">Severity</span>
                             <span className={`badge ${SEVERITY_BADGE[latest.severity] || "badge-accent"}`}>
@@ -179,30 +193,43 @@ export default function ControlPanel({
                     <div>
                         <span className="label">Materials Required</span>
                         <div className="detection-grid">
-                            <StatCard
-                                label="Hot-Mix Asphalt"
-                                value={latest.materials?.hotmix_kg ?? "--"}
-                                unit="kg"
-                                size="sm"
-                            />
-                            <StatCard
-                                label="Tack Coat"
-                                value={latest.materials?.tack_coat_liters ?? "--"}
-                                unit="L"
-                                size="sm"
-                            />
-                            <StatCard
-                                label="Aggregate Base"
-                                value={latest.materials?.aggregate_base_kg ?? "--"}
-                                unit="kg"
-                                size="sm"
-                            />
-                            <StatCard
-                                label="Est. Cost"
-                                value={latest.estimated_cost_inr ?? "--"}
-                                unit="INR"
-                                size="sm"
-                            />
+                            {latest.defect_type === "crack" ? (
+                                <>
+                                    <StatCard
+                                        label="Crack Sealant"
+                                        value={latest.materials?.crack_sealant_liters ?? "--"}
+                                        unit="L"
+                                        size="sm"
+                                    />
+                                    <StatCard
+                                        label="Primer"
+                                        value={latest.materials?.primer_liters ?? "--"}
+                                        unit="L"
+                                        size="sm"
+                                    />
+                                </>
+                            ) : (
+                                <>
+                                    <StatCard
+                                        label="Hot-Mix Asphalt"
+                                        value={latest.materials?.hotmix_kg ?? "--"}
+                                        unit="kg"
+                                        size="sm"
+                                    />
+                                    <StatCard
+                                        label="Tack Coat"
+                                        value={latest.materials?.tack_coat_liters ?? "--"}
+                                        unit="L"
+                                        size="sm"
+                                    />
+                                    <StatCard
+                                        label="Aggregate Base"
+                                        value={latest.materials?.aggregate_base_kg ?? "--"}
+                                        unit="kg"
+                                        size="sm"
+                                    />
+                                </>
+                            )}
                         </div>
                     </div>
                 </>

@@ -2,11 +2,20 @@ import base64
 import time
 
 from flask import Blueprint, request, jsonify
-from utils.material_estimator import estimate_volume, predict_materials_ml, estimate_cost, REPAIR_METHODS
-from utils.sheets import append_to_sheet
+from utils.material_estimator import (
+    estimate_volume, predict_materials_ml,
+    REPAIR_METHODS, REPAIR_METHODS_CRACK,
+)
+from utils.database import insert_detection
 from utils.yolo_runner import run_inference
 
 detect_bp = Blueprint("detect", __name__)
+
+
+def _get_repair_method(defect_type, severity):
+    if defect_type == "crack":
+        return REPAIR_METHODS_CRACK.get(severity, "Unknown")
+    return REPAIR_METHODS.get(severity, "Unknown")
 
 
 @detect_bp.route("/detect", methods=["POST"])
@@ -29,29 +38,31 @@ def detect():
         detections, annotated_b64 = run_inference(image_bytes)
 
         if not detections:
-            return jsonify({"status": "no_pothole", "message": "No pothole detected"}), 200
+            return jsonify({"status": "no_defect", "message": "No defect detected"}), 200
 
         best = max(detections, key=lambda d: d["area_px"])
+        defect_type = best.get("defect_type", "pothole")
 
         vol = estimate_volume(
             area_px=best["area_px"],
             depth_mm=depth_mm,
-            confidence=best["confidence"],
         )
 
-        # Use ML-based material prediction (falls back to rule-based if ML unavailable)
         materials = predict_materials_ml(
             area_m2=vol["area_m2"],
             depth_m=vol["depth_m"],
             volume_liters=vol["volume_liters"],
+            defect_type=defect_type,
         )
-        
-        # Calculate cost based on materials and severity
+
         severity = materials.get('severity', 'MEDIUM')
-        cost = estimate_cost(materials, severity)
+
+        materials_out = {k: v for k, v in materials.items()
+                         if k not in ("severity", "prediction_source")}
 
         payload = {
-            "status": "pothole_detected",
+            "status": "defect_detected",
+            "defect_type": defect_type,
             "timestamp": int(time.time()),
             "lat": lat,
             "lng": lng,
@@ -63,21 +74,16 @@ def detect():
             "volume_max_liters": vol["volume_max_liters"],
             "confidence": best["confidence"],
             "severity": severity,
-            "repair_method": REPAIR_METHODS.get(severity, "Unknown"),
-            "materials": {
-                "hotmix_kg": materials["hotmix_kg"],
-                "tack_coat_liters": materials["tack_coat_liters"],
-                "aggregate_base_kg": materials["aggregate_base_kg"],
-            },
-            "estimated_cost_inr": cost,
+            "repair_method": _get_repair_method(defect_type, severity),
+            "materials": materials_out,
             "prediction_source": materials.get("prediction_source", "RULE_BASED"),
             "annotated_image": annotated_b64,
         }
 
         try:
-            append_to_sheet(payload)
+            insert_detection(payload)
         except Exception as e:
-            payload["sheets_warning"] = str(e)
+            payload["db_warning"] = str(e)
 
         return jsonify(payload), 200
 
