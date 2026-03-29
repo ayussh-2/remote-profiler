@@ -87,18 +87,22 @@ def _extract_detections(result) -> list[dict]:
 
         if conf < CONFIDENCE_THRESHOLD:
             continue
-        if is_custom and cls_id not in defect_classes:
-            continue
 
         x1, y1, x2, y2 = box.xyxy[0].tolist()
         area_px = (x2 - x1) * (y2 - y1)
+        
+        cls_name = result.names.get(cls_id, "unknown") if hasattr(result, "names") else defect_classes.get(cls_id, "unknown")
+        cls_name = cls_name.lower().replace(" ", "_")
+
+        if is_custom and cls_name not in ["pothole", "crack", "shallow_pothole"]:
+            pass
 
         detections.append({
             "area_px": area_px,
             "confidence": round(conf, 3),
             "bbox": [x1, y1, x2, y2],
             "class_id": cls_id,
-            "defect_type": defect_classes.get(cls_id, "unknown"),
+            "defect_type": cls_name,
         })
 
     return detections
