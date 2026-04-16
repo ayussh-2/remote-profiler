@@ -1,10 +1,14 @@
 [variables]
 PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 
+[phases.setup]
+nixPkgs = ["python311", "gcc"]
+cmds = ["python3 -m venv /opt/venv"]
+
 [phases.install]
 cmds = [
-  "python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt",
-  "python -m pip uninstall -y opencv-python || true",
-  "python -m pip install opencv-python-headless>=4.8.0"
+  "/opt/venv/bin/pip install --upgrade pip",
+  "/opt/venv/bin/pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt",
+  "/opt/venv/bin/pip uninstall -y opencv-python || true",
+  "/opt/venv/bin/pip install 'opencv-python-headless>=4.8.0'"
 ]
-
