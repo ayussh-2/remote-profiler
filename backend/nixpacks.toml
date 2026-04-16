@@ -2,5 +2,13 @@
 PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu"
 
 [phases.setup]
-nixPkgs = ["python311", "gcc", "xorg.libxcb"]
+nixPkgs = ["python311", "gcc"]
+aptPkgs = ["libxcb1", "libgl1", "libglib2.0-0"]
+
+[phases.install]
+cmds = [
+  "python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt",
+  "python -m pip uninstall -y opencv-python || true",
+  "python -m pip install opencv-python-headless>=4.8.0"
+]
 
