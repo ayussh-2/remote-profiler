@@ -5,7 +5,8 @@ import random
 import os
 import glob
 
-RELAY_URL = "http://localhost:5001"
+RELAY_URL = "https://remote-profiler-2-production.up.railway.app"
+# RELAY_URL = "http://localhost:5001"
 IMAGE_DIR = r"d:\Projects\Personal\profiler\backend\simulator_images"
 image_files = glob.glob(os.path.join(IMAGE_DIR, "*.jpg"))
 
@@ -21,6 +22,7 @@ def send_frame():
         img_bytes = f.read()
         
     req = urllib.request.Request(f"{RELAY_URL}/api/frame", data=img_bytes)
+    print(f"{RELAY_URL}/api/frame")
     req.add_header("Content-Type", "image/jpeg")
     try:
         with urllib.request.urlopen(req) as res:
@@ -33,6 +35,7 @@ def send_depth():
     depth_val = random.uniform(100.0, 2000.0)
     data = json.dumps({"distance": depth_val}).encode("utf-8")
     req = urllib.request.Request(f"{RELAY_URL}/api/depth", data=data)
+    print(f"{RELAY_URL}/api/depth")
     req.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(req) as res:
