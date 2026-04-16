@@ -68,8 +68,13 @@ func configFromEnv() Config {
 		return fallback
 	}
 
+	listenAddr := getEnv("RELAYER_ADDR", ":5001")
+	if port := os.Getenv("PORT"); port != "" {
+		listenAddr = ":" + port // Railway dynamic port support
+	}
+
 	return Config{
-		ListenAddr:     getEnv("RELAYER_ADDR", ":5001"),
+		ListenAddr:     listenAddr,
 		BackendURL:     getEnv("BACKEND_URL", "http://localhost:5000/api/stream/frame"),
 		FuseWindow:     parseDur("FUSE_WINDOW", 300*time.Millisecond),
 		MaxFrameAge:    parseDur("MAX_FRAME_AGE", 2*time.Second),
