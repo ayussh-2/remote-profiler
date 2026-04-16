@@ -1,4 +1,2 @@
-[phases.install]
-cmds = [
-  "pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt"
-]
+[variables]
+PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu"
