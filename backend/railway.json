@@ -1,0 +1,9 @@
+{
+    "build": {
+        "builder": "nixpacks"
+    },
+    "deploy": {
+        "numReplicas": 1,
+        "startCommand": "gunicorn --worker-class eventlet -w 1 --timeout 600 --bind 0.0.0.0:$PORT wsgi:app"
+    }
+}
