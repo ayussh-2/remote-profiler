@@ -1,2 +1,6 @@
 [variables]
 PIP_EXTRA_INDEX_URL = "https://download.pytorch.org/whl/cpu"
+
+[phases.setup]
+nixPkgs = ["python311", "gcc", "xorg.libxcb"]
+
