@@ -8,19 +8,21 @@
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)
-2. [High-Level Architecture](#2-high-level-architecture)
-3. [Hardware Layer](#3-hardware-layer)
-4. [Backend -- Flask ML Server](#4-backend--flask-ml-server)
-5. [ML Pipeline -- YOLOv8 Inference](#5-ml-pipeline--yolov8-inference)
-6. [Volume Estimation Model](#6-volume-estimation-model)
-7. [Material & Cost Estimation](#7-material--cost-estimation)
-8. [Data Pipeline -- Google Sheets](#8-data-pipeline--google-sheets)
-9. [Frontend Dashboard](#9-frontend-dashboard)
-10. [API Reference](#10-api-reference)
-11. [Data Schema](#11-data-schema)
-12. [Calibration & Error Budget](#12-calibration--error-budget)
-13. [Tech Stack Summary](#13-tech-stack-summary)
-14. [Known Limitations & Future Work](#14-known-limitations--future-work)
+2. [Data Flow (ESP32 → Relayer → Backend)](#2-data-flow-esp32--relayer--backend)
+3. [High-Level Architecture](#3-high-level-architecture)
+4. [Sensor-Relayer (Go)](#4-sensor-relayer-go)
+5. [Hardware Layer](#5-hardware-layer)
+6. [Backend -- Flask ML Server](#6-backend--flask-ml-server)
+7. [ML Pipeline -- YOLOv8 Inference](#7-ml-pipeline--yolov8-inference)
+8. [Volume Estimation Model](#8-volume-estimation-model)
+9. [Material & Cost Estimation](#9-material--cost-estimation)
+10. [Data Pipeline -- Google Sheets](#10-data-pipeline--google-sheets)
+11. [Frontend Dashboard](#11-frontend-dashboard)
+12. [API Reference](#12-api-reference)
+13. [Data Schema](#13-data-schema)
+14. [Calibration & Error Budget](#14-calibration--error-budget)
+15. [Tech Stack Summary](#15-tech-stack-summary)
+16. [Known Limitations & Future Work](#16-known-limitations--future-work)
 
 ---
 
@@ -41,7 +43,44 @@ The Pavement Profiler is a low-cost, automated road defect detection system desi
 
 ---
 
-## 2. High-Level Architecture
+## 2. Data Flow (ESP32 → Relayer → Backend)
+
+### Sequence Diagram
+
+```
+ESP32-CAM                Sensor-Relayer              Flask Backend
+    |                          |                           |
+    |--POST /api/frame-------->|                           |
+    |   (JPEG binary)          |                           |
+    |                    (buffers frame)                   |
+    |                          |                           |
+    |--POST /api/depth-------->|                           |
+    |   (JSON: {distance})     |                           |
+    |                    (fuses frame+depth)              |
+    |                    (within 300ms window)             |
+    |                          |                           |
+    |                          |--POST /api/stream/frame-->|
+    |                          |   (multipart: image,      |
+    |                          |    depth_mm, lat, lng,    |
+    |                          |    time_diff_ms)          |
+    |                          |                           |
+    |                          |<--204 No Content----------|
+    |                          |                           |
+    |--POST /api/gps---------->|                           |
+    |   (JSON: lat/lng)   (stores latest)                  |
+    |                          |                           |
+```
+
+### Key Timing Constraints
+
+- **Frame arrival → Depth arrival**: Must be within `FUSE_WINDOW` (default 300ms) to create a fused payload
+- **If depth doesn't arrive in time**: Frame is discarded after 2 seconds (configurable via `MAX_FRAME_AGE`)
+- **Worker forwarding**: 4 parallel goroutines (configurable via `WORKER_COUNT`) forward to Python backend with 5s timeout per request
+- **Queue overflow**: If fused payloads exceed `QUEUE_SIZE` (default 64), oldest is dropped with a warning
+
+---
+
+## 3. High-Level Architecture
 
 ```
 +-----------------------------------------------------------+
@@ -53,21 +92,40 @@ The Pavement Profiler is a low-cost, automated road defect detection system desi
 |   |   via Wi-Fi) |       +-----------------------+         |
 |   +------+-------+                  |                      |
 +----------+--------------------------+----------------------+
-           |  HTTP multipart/form     |
-           |  POST /api/detect        |
+           |  HTTP POST /api/frame    |
+           |  + /api/depth            |
            v                          v
 +-----------------------------------------------------------+
-|                   FLASK BACKEND (Python)                    |
+|            SENSOR-RELAYER (Go) :5001                        |
 |                                                            |
-|   +---------------+   +-------------------+   +---------+  |
-|   | yolo_runner   |-->| material_estimator|-->| sheets  |  |
-|   | (YOLOv8 +     |   | - volume est.     |   | (gspread|  |
-|   |  CUDA/CPU)    |   | - severity class. |   |  API)   |  |
-|   +---------------+   | - materials (ML   |   +---------+  |
-|                        |   or rule-based)  |       |        |
-|                        | - cost estimation |       v        |
-|                        +-------------------+  Google Sheets |
-|                                                (live log)   |
+|   +------------------+    +-------------------+           |
+|   | Frame/Depth/GPS  |    | Worker Pool       |           |
+|   | Store (sync)     |--->| (fusion + forward)|           |
+|   +------------------+    +-------------------+           |
+|         ^                              |                  |
+|         |                              v                  |
+|   +------------------+    +-------------------+           |
+|   | Fusion Logic     |    | HTTP Client       |           |
+|   | (300ms window)   |    | (multipart upload)|           |
+|   +------------------+    +-------------------+           |
+|                                      |                    |
++--------------------------------------+---------------------+
+                                       |
+                    HTTP POST /api/stream/frame
+                    (image + depth_mm + lat/lng)
+                                       v
++-----------------------------------------------------------+
+|                  FLASK BACKEND (Python) :5000              |
+|                                                            |
+|   +---------------+   +-------------------+   +---------+ |
+|   | yolo_runner   |-->| material_estimator|-->| sheets  | |
+|   | (YOLOv8 +     |   | - volume est.     |   | (gspread| |
+|   |  CUDA/CPU)    |   | - severity class. |   |  API)   | |
+|   +---------------+   | - materials (ML   |   +---------+ |
+|                        |   or rule-based)  |       |      |
+|                        | - cost estimation |       v      |
+|                        +-------------------+  Google      |
+|                                               Sheets      |
 +-----------------------------------------------------------+
            |
            v
@@ -87,7 +145,102 @@ The Pavement Profiler is a low-cost, automated road defect detection system desi
 
 ---
 
-## 3. Hardware Layer
+## 4. Sensor-Relayer (Go)
+
+The relayer is a high-performance stateless service that:
+
+1. **Ingests** JPEG frames, depth samples, and GPS coordinates from ESP32 over HTTP
+2. **Fuses** frame + depth by timestamp (tolerance: 300ms)
+3. **Forwards** fused payloads to the Flask backend as multipart/form-data
+4. **Meters** ingress/egress with atomic counters (lock-free)
+5. **Buffers** with configurable queue depth and worker pool
+
+### Purpose
+
+- **Decouples** sensor timing from ML inference — ESP32 can post frame and depth at slightly different times, relayer handles sync
+- **Scales** frame capture rate — multiple ESP32s can POST to same relayer; it's stateless
+- **Reduces** backend load — batching, compression, connection pooling handled by Go's efficient HTTP client
+- **Enables** live dashboarding — metrics endpoint provides queue depth, throughput, error counts
+
+### File Structure
+
+```
+sensor-relayer/
+    main.go                      # Entry point
+    go.mod
+    Dockerfile                   # Multi-stage (10 MB final image)
+    simulator.py                 # Test tool to simulate ESP32 sensors
+    .env.example
+    internal/
+        config/
+            config.go            # FromEnv() + defaults
+        models/
+            types.go             # SensorFrame, DepthSample, FusedPayload
+        store/
+            store.go             # State mgmt: SetFrame, TryFuse, GetLatestFrame
+        metrics/
+            metrics.go           # Snapshot() for live metrics
+        handler/
+            handlers.go          # HTTP endpoints (Frame, Depth, GPS, Metrics, etc)
+        worker/
+            forward.go           # Forward payload to backend (multipart)
+            pool.go              # Worker pool management
+        server/
+            server.go            # HTTP server setup + routes
+    web/
+        embed.go                 # Embeds index.html at compile-time
+        static/
+            index.html           # Live dashboard UI
+    pkg/
+        utils/
+            utils.go             # Utility functions
+```
+
+### Configuration (Environment)
+
+```bash
+RELAYER_ADDR=:5001                                 # Listen port
+BACKEND_URL=http://localhost:5000/api/stream/frame # ML backend endpoint
+FUSE_WINDOW=300ms                                  # Max frame-depth age diff
+MAX_FRAME_AGE=2s                                   # Drop old frames
+FORWARD_TIMEOUT=5s                                 # HTTP timeout to backend
+WORKER_COUNT=4                                     # Parallel forwarder goroutines
+QUEUE_SIZE=64                                      # Internal channel buffer
+PORT=<auto for Railway>                            # Override RELAYER_ADDR
+```
+
+### API Endpoints
+
+| Method | Path         | Body                         | Response | Purpose                       |
+| ------ | ------------ | ---------------------------- | -------- | ----------------------------- |
+| POST   | /api/frame   | raw JPEG or multipart image  | 204      | Ingest frame from ESP32-CAM   |
+| POST   | /api/depth   | `{"distance": 123.4}`        | 204      | Ingest depth from VL53L1X     |
+| POST   | /api/gps     | `{"lat": 28.6, "lng": 77.2}` | 204      | Ingest GPS coordinates        |
+| GET    | /api/metrics | —                            | JSON     | Live counters + queue status  |
+| GET    | /api/config  | —                            | JSON     | Fetch backend URL             |
+| POST   | /api/config  | `{"backend_url": "..."}`     | 200      | Update backend URL live       |
+| GET    | /api/preview | —                            | JPEG     | Latest frame (for debugging)  |
+| GET    | /            | —                            | HTML     | Dashboard UI                  |
+| GET    | /health      | —                            | 200 OK   | Health check (load balancers) |
+
+### Metrics Endpoint (GET /api/metrics)
+
+```json
+{
+    "frames_received": 1234,
+    "depth_received": 1250,
+    "gps_received": 456,
+    "fuse_success": 1200,
+    "fuse_miss": 34,
+    "forward_success": 1198,
+    "forward_error": 2,
+    "queue_dropped": 0,
+    "queue_len": 3,
+    "queue_cap": 64
+}
+```
+
+---
 
 ### Components
 
@@ -101,21 +254,22 @@ The Pavement Profiler is a low-cost, automated road defect detection system desi
 ### ESP32-CAM
 
 - Captures JPEG frames at configurable resolution
-- Streams or sends single frames via Wi-Fi to the Flask server using `HTTPClient`
-- Posts to `POST /api/detect` as `multipart/form-data` alongside the ToF reading
+- Posts frame to `/api/frame` endpoint on relayer (raw binary or multipart)
+- Connected to VL53L1X via I2C for depth readings
+- Sends GPS updates to `/api/gps` when available
 
 ### VL53L1X Time-of-Flight Sensor
 
 - Uses 940nm infrared laser to measure distance
 - Range: 4mm - 4000mm; accuracy: +/-15mm typical
 - Connected via I2C to ESP32-CAM (SCL/SDA pins)
-- Samples continuously; peak depth over a defect is captured as `Z_max`
+- Samples continuously; depth reading posted to `/api/depth`
 
 **Known limitation:** Dark/absorptive asphalt surfaces reduce IR reflectance. MVP calibration targets lighter pavement. Industrial LiDAR is the upgrade path.
 
 ---
 
-## 4. Backend -- Flask ML Server
+## 6. Backend -- Flask ML Server
 
 ### File Structure
 
@@ -152,12 +306,14 @@ backend/
 
 ### Two ML Models
 
-| Model | Type | Purpose | CUDA |
-| --- | --- | --- | --- |
-| Pothole/Crack Detector | YOLOv8 (.pt) | Detect defects in images, produce bounding boxes | Yes (auto) |
-| Material Estimator | sklearn RandomForest (.pkl) | Predict material quantities from pothole dimensions | No (CPU-only by design) |
+| Model                  | Type                        | Purpose                                             | CUDA                    |
+| ---------------------- | --------------------------- | --------------------------------------------------- | ----------------------- |
+| Pothole/Crack Detector | YOLOv8 (.pt)                | Detect defects in images, produce bounding boxes    | Yes (auto)              |
+| Material Estimator     | sklearn RandomForest (.pkl) | Predict material quantities from pothole dimensions | No (CPU-only by design) |
 
-### Request Lifecycle -- `POST /api/detect`
+### Request Lifecycle -- `POST /api/stream/frame` (from Relayer)
+
+**Note:** The endpoint is now called `/api/stream/frame` (not `/api/detect`) to accommodate the relayer's multipart format with fused depth and GPS.
 
 ```
 1. Parse multipart form -> extract image bytes, depth_mm, lat, lng
@@ -203,7 +359,7 @@ Device and GPU name are logged once on first inference. The material estimator u
 
 ---
 
-## 5. ML Pipeline -- YOLOv8 Inference
+## 7. ML Pipeline -- YOLOv8 Inference
 
 ### Model
 
@@ -236,7 +392,7 @@ The model is lazy-loaded on first request and held in memory via module-level `_
 
 ---
 
-## 6. Volume Estimation Model
+## 8. Volume Estimation Model
 
 ### Formula
 
@@ -272,18 +428,18 @@ Update `PX_TO_MM` in `utils/material_estimator.py` before deployment.
 
 ---
 
-## 7. Material & Cost Estimation
+## 9. Material & Cost Estimation
 
 ### Severity Classification
 
 Based on area and depth thresholds (per IRC guidelines):
 
-| Severity | Depth      | Area      | Repair Method                      |
-| -------- | ---------- | --------- | ---------------------------------- |
-| LOW      | < 25mm     | < 0.05m2  | Surface patch / slurry seal        |
-| MEDIUM   | < 50mm     | < 0.15m2  | Throw-and-roll patch               |
-| HIGH     | < 100mm    | < 0.30m2  | Full-depth semi-permanent patch    |
-| CRITICAL | >= 100mm   | >= 0.30m2 | Full-depth patch with base repair  |
+| Severity | Depth    | Area      | Repair Method                     |
+| -------- | -------- | --------- | --------------------------------- |
+| LOW      | < 25mm   | < 0.05m2  | Surface patch / slurry seal       |
+| MEDIUM   | < 50mm   | < 0.15m2  | Throw-and-roll patch              |
+| HIGH     | < 100mm  | < 0.30m2  | Full-depth semi-permanent patch   |
+| CRITICAL | >= 100mm | >= 0.30m2 | Full-depth patch with base repair |
 
 ### Material Estimation -- Dual Mode
 
@@ -316,19 +472,19 @@ Models are saved to `models/material_estimator/`. On app startup, `enable_ml_mod
 
 Per-unit costs (INR, market rates):
 
-| Material/Resource | Rate |
-| --- | --- |
-| Hot-mix asphalt | 7.0 INR/kg |
-| Tack coat (bitumen emulsion) | 60.0 INR/L |
-| Aggregate base | 1.0 INR/kg |
-| Labour (base) | 300 INR/repair |
-| Equipment (base) | 150 INR/repair |
+| Material/Resource            | Rate           |
+| ---------------------------- | -------------- |
+| Hot-mix asphalt              | 7.0 INR/kg     |
+| Tack coat (bitumen emulsion) | 60.0 INR/L     |
+| Aggregate base               | 1.0 INR/kg     |
+| Labour (base)                | 300 INR/repair |
+| Equipment (base)             | 150 INR/repair |
 
 Labour and equipment costs are scaled by severity multipliers.
 
 ---
 
-## 8. Data Pipeline -- Google Sheets
+## 10. Data Pipeline -- Google Sheets
 
 ### Architecture
 
@@ -342,19 +498,19 @@ Flask backend
 
 ### Sheet Schema
 
-| Column            | Type   | Description                     |
-| ----------------- | ------ | ------------------------------- |
-| timestamp         | int    | Unix epoch                      |
-| datetime          | string | Human-readable local time       |
-| lat               | float  | GPS latitude                    |
-| lng               | float  | GPS longitude                   |
-| area_m2           | float  | Detected pothole area           |
-| depth_m           | float  | ToF depth reading               |
-| volume_m3         | float  | Estimated repair volume         |
-| volume_liters     | float  | Volume in litres                |
-| confidence        | float  | YOLO detection confidence (0-1) |
-| severity          | string | LOW / MEDIUM / HIGH / CRITICAL  |
-| estimated_cost_inr| float  | Total estimated repair cost     |
+| Column             | Type   | Description                     |
+| ------------------ | ------ | ------------------------------- |
+| timestamp          | int    | Unix epoch                      |
+| datetime           | string | Human-readable local time       |
+| lat                | float  | GPS latitude                    |
+| lng                | float  | GPS longitude                   |
+| area_m2            | float  | Detected pothole area           |
+| depth_m            | float  | ToF depth reading               |
+| volume_m3          | float  | Estimated repair volume         |
+| volume_liters      | float  | Volume in litres                |
+| confidence         | float  | YOLO detection confidence (0-1) |
+| severity           | string | LOW / MEDIUM / HIGH / CRITICAL  |
+| estimated_cost_inr | float  | Total estimated repair cost     |
 
 ### Setup Steps
 
@@ -373,7 +529,7 @@ Sheets writes are wrapped in a `try/except` -- a Sheets API failure does **not**
 
 ---
 
-## 9. Frontend Dashboard
+## 11. Frontend Dashboard
 
 ### Technology
 
@@ -443,7 +599,7 @@ After a successful detection, the control panel displays:
 
 ---
 
-## 10. API Reference
+## 12. API Reference
 
 ### `POST /api/detect`
 
@@ -553,7 +709,7 @@ Write a dummy row and read back to verify Google Sheets connectivity.
 
 ---
 
-## 11. Data Schema
+## 13. Data Schema
 
 ### Detection Record
 
@@ -584,7 +740,7 @@ Detection
 
 ---
 
-## 12. Calibration & Error Budget
+## 14. Calibration & Error Budget
 
 ### Camera Calibration
 
@@ -608,48 +764,48 @@ Recalibrate by:
 
 ### Volume Estimation Error
 
-| Source                        | Expected Error         |
-| ----------------------------- | ---------------------- |
-| Volume estimation (heuristic) | +/-15%                 |
-| ToF depth on dark asphalt     | +/-5-10mm              |
+| Source                        | Expected Error           |
+| ----------------------------- | ------------------------ |
+| Volume estimation (heuristic) | +/-15%                   |
+| ToF depth on dark asphalt     | +/-5-10mm                |
 | Pixel-to-metric calibration   | +/-5% (post-calibration) |
-| Total combined (RSS)          | ~+/-18%                |
+| Total combined (RSS)          | ~+/-18%                  |
 
 This is still superior to manual estimation which typically exceeds +/-20% wastage.
 
 ---
 
-## 13. Tech Stack Summary
+## 15. Tech Stack Summary
 
-| Layer             | Technology                      | Rationale                              |
-| ----------------- | ------------------------------- | -------------------------------------- |
-| Robot MCU         | ESP32-CAM                       | Low cost, Wi-Fi, camera integrated     |
-| Depth Sensor      | VL53L1X                         | I2C, accurate at short range, cheap    |
-| Backend           | Flask 3.1                       | Lightweight, quick to set up           |
-| Object Detection  | YOLOv8 (Ultralytics) + CUDA    | Industry standard, GPU-accelerated     |
-| Material Est. ML  | scikit-learn (RandomForest)     | Lightweight, fast training, no GPU needed |
-| Volume Math       | Custom Python                   | Straightforward formula, tweakable     |
-| Data Storage      | Google Sheets                   | Zero cost, accessible, no DB setup     |
-| Sheets Client     | gspread + google-auth           | Official + well maintained             |
-| Frontend          | React (Vite)                    | Component model, easy state management |
-| Map               | Leaflet.js (react-leaflet)      | Free, OSM tiles, no API key needed     |
-| Hosting (dev)     | localhost                       | Flask dev server + Vite dev server     |
+| Layer            | Technology                  | Rationale                                 |
+| ---------------- | --------------------------- | ----------------------------------------- |
+| Robot MCU        | ESP32-CAM                   | Low cost, Wi-Fi, camera integrated        |
+| Depth Sensor     | VL53L1X                     | I2C, accurate at short range, cheap       |
+| Backend          | Flask 3.1                   | Lightweight, quick to set up              |
+| Object Detection | YOLOv8 (Ultralytics) + CUDA | Industry standard, GPU-accelerated        |
+| Material Est. ML | scikit-learn (RandomForest) | Lightweight, fast training, no GPU needed |
+| Volume Math      | Custom Python               | Straightforward formula, tweakable        |
+| Data Storage     | Google Sheets               | Zero cost, accessible, no DB setup        |
+| Sheets Client    | gspread + google-auth       | Official + well maintained                |
+| Frontend         | React (Vite)                | Component model, easy state management    |
+| Map              | Leaflet.js (react-leaflet)  | Free, OSM tiles, no API key needed        |
+| Hosting (dev)    | localhost                   | Flask dev server + Vite dev server        |
 
 ---
 
-## 14. Known Limitations & Future Work
+## 16. Known Limitations & Future Work
 
 ### MVP Limitations
 
-| Limitation                                     | Impact                               | Mitigation                              |
-| ---------------------------------------------- | ------------------------------------ | --------------------------------------- |
-| Small training dataset (18 records)            | ML material predictions may be rough | Collect 50+ real repair records         |
-| Single depth sample per frame                  | Misses depth variance across defect  | Multi-sample sweep or LiDAR point cloud |
-| No GPS on ESP32-CAM                            | Coordinates must be entered manually | Add NEO-6M GPS module (~400 INR)        |
-| Dark asphalt degrades ToF                      | Depth inaccuracy                     | Ambient light correction or LiDAR       |
-| Google Sheets as DB                            | Not scalable beyond ~1000 rows       | Migrate to SQLite or Supabase           |
-| No auth on API                                 | Open endpoint                        | Add API key header for production       |
-| sklearn material models are CPU-only           | Not a bottleneck (ms-level latency)  | Acceptable for current scale            |
+| Limitation                           | Impact                               | Mitigation                              |
+| ------------------------------------ | ------------------------------------ | --------------------------------------- |
+| Small training dataset (18 records)  | ML material predictions may be rough | Collect 50+ real repair records         |
+| Single depth sample per frame        | Misses depth variance across defect  | Multi-sample sweep or LiDAR point cloud |
+| No GPS on ESP32-CAM                  | Coordinates must be entered manually | Add NEO-6M GPS module (~400 INR)        |
+| Dark asphalt degrades ToF            | Depth inaccuracy                     | Ambient light correction or LiDAR       |
+| Google Sheets as DB                  | Not scalable beyond ~1000 rows       | Migrate to SQLite or Supabase           |
+| No auth on API                       | Open endpoint                        | Add API key header for production       |
+| sklearn material models are CPU-only | Not a bottleneck (ms-level latency)  | Acceptable for current scale            |
 
 ### Upgrade Path
 
