@@ -12,10 +12,7 @@ dev-server:
 	cd backend && $(VPY) app.py
 
 dev-frontend:
-	cd frontend\web && bun dev
-
-dev-mobile:
-	cd frontend\mobile && flutter run -v
+	cd frontend && bun dev
 
 dev-relayer:
 	cd $(RELAYER_DIR) && go run .
@@ -35,7 +32,4 @@ simulate-relayer:
 clean:
 	cd backend && $(VPY) -c "import sqlite3; c=sqlite3.connect('detections.db'); c.execute('DELETE FROM detections'); c.commit(); print('flushed')"
 
-build-apk:
-	cd frontend\mobile && flutter build apk -v
-
-.PHONY: setup install dev-server dev-frontend dev-mobile dev-relayer build-relayer docker-relayer simulate simulate-relayer clean build-apk
+.PHONY: setup install dev-server dev-frontend dev-relayer build-relayer docker-relayer simulate simulate-relayer clean

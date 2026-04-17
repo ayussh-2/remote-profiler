@@ -36,7 +36,7 @@ A low-cost, sensor-fused road assessment robot that replaces subjective manual i
                  ↓
     ┌────────────────────────────────┐
     │   React Dashboard (Frontend)   │
-    │  Port :3000                    │
+    │  Port :5173                    │
     │  • Live detection results      │
     │  • Leaflet map with pins       │
     │  • Logs table (from Sheets)    │
@@ -45,7 +45,7 @@ A low-cost, sensor-fused road assessment robot that replaces subjective manual i
 
 ## Quick Start
 
-**Prerequisites:** Go 1.22+, Python 3.9+, Node.js (for web), Flutter (for mobile app)
+**Prerequisites:** Go 1.22+, Python 3.9+, Node.js (for web)
 
 ### 1. Set Up Backend
 
@@ -70,7 +70,7 @@ Environment: Copy `.env.example` to `.env` and adjust `BACKEND_URL`, `WORKER_COU
 ### 3. Start Frontend Dashboard
 
 ```bash
-cd frontend/web
+cd frontend
 bun install
 bun dev                     # Runs on http://localhost:5173
 ```
@@ -95,13 +95,12 @@ make simulate-relayer       # Test simulator
 
 ### Components
 
-| Component           | Language     | Role                                 | Docs                                                   |
-| ------------------- | ------------ | ------------------------------------ | ------------------------------------------------------ |
-| **RC Robot**        | C (ESP32)    | Captures frames + depth              | [Hardware Design](#hardware-design)                    |
-| **Sensor-Relayer**  | Go           | Fuses sensors, buffers, forwards     | [sensor-relayer/README.md](sensor-relayer/README.md)   |
-| **Backend (Flask)** | Python       | YOLO inference + material estimation | [docs/ARCHITECTURE.MD](docs/ARCHITECTURE.MD)           |
-| **Frontend**        | React + Vite | Dashboard UI, maps, logs             | [frontend/web/README.md](frontend/web/README.md)       |
-| **Mobile App**      | Flutter      | On-device inspection tool            | [frontend/mobile/README.md](frontend/mobile/README.md) |
+| Component           | Language     | Role                                 | Docs                                                 |
+| ------------------- | ------------ | ------------------------------------ | ---------------------------------------------------- |
+| **RC Robot**        | C (ESP32)    | Captures frames + depth              | [Hardware Design](#hardware-design)                  |
+| **Sensor-Relayer**  | Go           | Fuses sensors, buffers, forwards     | [sensor-relayer/README.md](sensor-relayer/README.md) |
+| **Backend (Flask)** | Python       | YOLO inference + material estimation | [docs/ARCHITECTURE.MD](docs/ARCHITECTURE.MD)         |
+| **Frontend**        | React + Vite | Dashboard UI, maps, logs             | [frontend/README.md](frontend/README.md)             |
 
 ## Data Flow
 
@@ -123,7 +122,7 @@ ESP32 Robot
                     Append to Google Sheets
                     + Return annotated image
                                ↓
-                    React Dashboard :3000
+                    React Dashboard :5173
                     (display results + maps)
 ```
 
@@ -168,15 +167,12 @@ profiler/
 │   ├── simulator.py            # Test tool
 │   └── Dockerfile              # Multi-stage (10 MB final)
 │
-├── frontend/
-│   ├── web/                    # React dashboard
-│   │   ├── src/
-│   │   ├── package.json
-│   │   └── vite.config.js
-│   └── mobile/                 # Flutter app
-│       ├── lib/
-│       ├── pubspec.yaml
-│       └── android/, ios/
+├── frontend/                        # React dashboard
+│   ├── src/
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── eslint.config.js
 │
 ├── docs/
 │   ├── ABOUT.md                # Executive summary
@@ -266,7 +262,6 @@ VITE_API_URL=http://localhost:5000
 
 ```bash
 make build-relayer           # Go binary
-make build-apk               # Flutter APK
 ```
 
 ### Run Dev Servers
@@ -274,7 +269,7 @@ make build-apk               # Flutter APK
 ```bash
 make dev-server              # Python (port 5000)
 make dev-relayer             # Go (port 5001)
-make dev-frontend            # React (port 3173)
+make dev-frontend            # React (port 5173)
 ```
 
 ### Testing
@@ -361,7 +356,7 @@ _Note: GPU requires NVIDIA CUDA Toolkit 12.1+ and cuDNN 9.0+. Backend auto-detec
 - **[ARCHITECTURE.MD](docs/ARCHITECTURE.MD)** — Technical deep-dive (hardware, ML pipeline, data flow)
 - **[sensor-relayer/README.md](sensor-relayer/README.md)** — Go relay service details
 - **[backend/README.md](backend/README.md)** — Python Flask server & GPU setup guide
-- **[frontend/web/README.md](frontend/web/README.md)** — React dashboard guide
+- **[frontend/README.md](frontend/README.md)** — React dashboard guide
 
 ## License
 
