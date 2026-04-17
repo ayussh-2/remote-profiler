@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relayer Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f172a; color: #f8fafc; padding: 2rem; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card { background: #1e293b; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { margin-top: 0; color: #38bdf8; }
+        .flex { display: flex; gap: 1rem; align-items: center; }
+        input[type="text"] { flex: 1; padding: 0.5rem; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; }
+        button { padding: 0.5rem 1rem; background: #0ea5e9; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0284c7; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .metric-box { background: #0f172a; padding: 1rem; border-radius: 4px; text-align: center; border: 1px solid #334155; }
+        .metric-value { font-size: 1.5rem; font-weight: bold; color: #e2e8f0; margin-bottom: 0.25rem; }
+        .metric-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+        .preview { width: 100%; max-width: 400px; height: auto; border-radius: 4px; background: #000; border: 2px solid #334155; aspect-ratio: 4/3; object-fit: contain; }
+        .preview-container { display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .status { margin-top: 0.5rem; font-size: 0.9rem; color: #10b981; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <h1>📡 Sensor Relayer Dashboard</h1>
+            <p>View stats and update the backend tunnel destination live.</p>
+        </div>
+
+        <div class="card">
+            <h2>Backend Destination</h2>
+            <div class="flex">
+                <input type="text" id="backend-url" placeholder="http://...", value="loading...">
+                <button onclick="updateBackend()">Update URL</button>
+            </div>
+            <div id="url-status" class="status"></div>
+        </div>
+
+        <div class="card flex" style="align-items: flex-start; justify-content: space-between;">
+            <div style="flex: 1;">
+                <h2>Metrics (Auto-updates)</h2>
+                <div class="metrics" id="metrics-grid">
+                    <!-- populated by js -->
+                </div>
+            </div>
+            <div class="preview-container" style="flex: 1; text-align: center;">
+                <h2>Latest Frame</h2>
+                <img id="preview-img" class="preview" src="/api/preview" alt="Waiting for frame..." onerror="this.onerror=null; this.src=''; this.alt='No frame yet';">
+                <p style="font-size: 0.8rem; color: #94a3b8;">Refreshes every 1s</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function fetchConfig() {
+            try {
+                const res = await fetch('/api/config');
+                const data = await res.json();
+                document.getElementById('backend-url').value = data.backend_url;
+            } catch (e) {
+                console.error("Failed to load config", e);
+            }
+        }
+
+        async function updateBackend() {
+            const url = document.getElementById('backend-url').value;
+            const status = document.getElementById('url-status');
+            status.textContent = 'Updating...';
+            status.style.color = '#38bdf8';
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ backend_url: url })
+                });
+                if (res.ok) {
+                    status.textContent = '✅ Success';
+                    status.style.color = '#10b981';
+                    setTimeout(() => status.textContent='', 3000);
+                } else {
+                    status.textContent = '❌ Error updating';
+                    status.style.color = '#ef4444';
+                }
+            } catch (e) {
+                status.textContent = '❌ Network error';
+                status.style.color = '#ef4444';
+            }
+        }
+
+        async function fetchMetrics() {
+            try {
+                const res = await fetch('/api/metrics');
+                const data = await res.json();
+                const grid = document.getElementById('metrics-grid');
+                grid.innerHTML = Object.entries(data).map(([key, val]) => `
+                    <div class="metric-box">
+                        <div class="metric-value">${val}</div>
+                        <div class="metric-label">${key.replace(/_/g, ' ')}</div>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        function refreshPreview() {
+            const img = document.getElementById('preview-img');
+            img.src = '/api/preview?t=' + new Date().getTime();
+        }
+
+        // Init
+        fetchConfig();
+        fetchMetrics();
+        setInterval(fetchMetrics, 1000);
+        setInterval(refreshPreview, 1000); // refresh image every 1s
+    </script>
+</body>
+</html>

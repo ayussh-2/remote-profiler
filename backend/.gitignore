@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Environment variables
+.env
+
+# Database files (ephemeral on Railway - use persistent volume if needed)
+detections.db
+detections.db-shm
+detections.db-wal
+
+# Credentials (should be set as Railway env vars)
+credentials.json
+
+# Data and simulator images
+data/
+simulator_images/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Render-specific (not needed for Railway)
+.render-build.sh
