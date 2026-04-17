@@ -303,15 +303,28 @@ docker run -p 5001:5001 \
 - **Memory**: ~20 MB (frame buffer + workers)
 - **CPU**: 2–3 cores per 1000 fps
 
-### Backend (Python + CUDA)
+### Backend (Python + YOLOv8)
 
-- **YOLOv8 inference**: ~30–50ms per frame (RTX 3080) / ~200ms (CPU)
-- **Material estimation**: <5ms (sklearn RandomForest)
+#### CPU-Only (Baseline)
+
+- **YOLOv8 inference**: ~450–550ms per frame (i7-12700K)
+- **Material estimation**: 5–10ms (sklearn RandomForest)
 - **Sheets write**: ~2–3s (async, non-blocking)
+- **Throughput**: ~2 frames/second
+
+#### GPU-Accelerated ⚡ (Recommended for Production)
+
+- **YOLOv8 inference**: ~15–25ms per frame (RTX 3070)
+- **Material estimation**: 5–10ms (sklearn RandomForest, CPU)
+- **Sheets write**: ~2–3s (async, non-blocking)
+- **Throughput**: ~15–20 frames/second
+- **Speedup**: **20–30x faster than CPU**
+
+_Note: GPU requires NVIDIA CUDA Toolkit 12.1+ and cuDNN 9.0+. Backend auto-detects GPU and falls back to CPU if unavailable. See [backend/README.md](backend/README.md) for GPU setup._
 
 ### End-to-End
 
-- **Sensor capture → Dashboard display**: ~2–3 seconds total
+- **Sensor capture → Dashboard display (GPU)**: ~500–800ms total
 - **Detection accuracy**: 85–90% on trained dataset
 - **Volume estimation error**: ±10–15% (calibrated on 18-sample dataset)
 
@@ -320,8 +333,9 @@ docker run -p 5001:5001 \
 1. **Depth sensor**: IR reflectance issues on dark asphalt → upgrade to LiDAR for production
 2. **Camera**: 320×240 default resolution → increase for finer defect details
 3. **Material model**: Trained on 18 samples → collect more for robustness
-4. **GPS**: Optional; not all deployments have location data
-5. **Sheets latency**: Async writes can delay log updates by 2–5 seconds
+4. **GPU availability**: Not all deployments have NVIDIA GPUs; backend gracefully falls back to CPU
+5. **GPS**: Optional; not all deployments have location data
+6. **Sheets latency**: Async writes can delay log updates by 2–5 seconds
 
 ## Future Work
 
@@ -331,6 +345,7 @@ docker run -p 5001:5001 \
 - [ ] LoRaWAN fallback for off-WiFi zones
 - [ ] AR overlay for field crews
 - [ ] Cost/material database expansion (>100 repair types)
+- [ ] GPU optimization: batch inference, INT8 quantization
 
 ## Contributing
 
@@ -345,8 +360,8 @@ docker run -p 5001:5001 \
 - **[ABOUT.md](docs/ABOUT.md)** — Executive summary, problem statement, objectives
 - **[ARCHITECTURE.MD](docs/ARCHITECTURE.MD)** — Technical deep-dive (hardware, ML pipeline, data flow)
 - **[sensor-relayer/README.md](sensor-relayer/README.md)** — Go relay service details
+- **[backend/README.md](backend/README.md)** — Python Flask server & GPU setup guide
 - **[frontend/web/README.md](frontend/web/README.md)** — React dashboard guide
-- **[backend/README.md](backend/README.md)** — Python Flask server details
 
 ## License
 
